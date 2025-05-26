@@ -168,89 +168,79 @@ class BinaryOperations:
         self.bits = bits
 
     def multiply_in_direct_code(self):
-        number_1_direct = self.get_direct_code(self.number_1)
-        number_2_direct = self.get_direct_code(self.number_2)
-
-        sign_1 = int(number_1_direct[0])
-        sign_2 = int(number_2_direct[0])
-
-        number_1_abs = int(number_1_direct[1:], 2)
-        number_2_abs = int(number_2_direct[1:], 2)
-
-        result_abs = number_1_abs * number_2_abs
-
-        result_sign = "0" if sign_1 == sign_2 else "1"
-
-        max_value = (1 << (self.bits - 1)) - 1
-        if result_abs > max_value:
-            OVERFLOW_ERROR = "Переполнение: результат {result_abs} не помещается в {self.bits} бит."
-            raise OverflowError(OVERFLOW_ERROR)
-
-        result_binary = bin(result_abs)[2:].zfill(self.bits - 1)
-        result_binary = result_sign + result_binary
-
-        result_decimal = -result_abs if result_sign == "1" else result_abs
-
-        return result_decimal, result_binary
-
-    def divide_with_precision(self, precision=DEFAULT_PRECISION):
-        if self.number_2 == 0:
-            DIVISION_BY_ZERO_ERROR = "Деление на ноль невозможно!"
-            raise ZeroDivisionError(DIVISION_BY_ZERO_ERROR)
-
-        def direct_code(n):
+        def get_sign_and_value(n):
             if n >= 0:
-                return f"0{n:0{self.bits - 1}b}"
-            else:
-                return f"1{(-n):0{self.bits - 1}b}"
+                return '0', n
+            return '1', -n
 
-        number_1_direct = direct_code(self.number_1)
-        number_2_direct = direct_code(self.number_2)
+        sign1, val1 = get_sign_and_value(self.number_1)
+        sign2, val2 = get_sign_and_value(self.number_2)
 
-        sign_1 = int(number_1_direct[0])
-        sign_2 = int(number_2_direct[0])
-        result_sign = "0" if sign_1 == sign_2 else "1"
+        result_sign = '0' if sign1 == sign2 else '1'
+        max_bit_value = (1 << (self.bits - 1)) - 1
 
-        dividend = int(number_1_direct[1:], 2)
-        divisor = int(number_2_direct[1:], 2)
+        # Умножение через сложение
+        product = 0
+        for _ in range(val2):
+            product += val1
+            if product > max_bit_value:
+                raise OverflowError(f"Результат {product} превышает {self.bits - 1} бит")
 
-        shift_count = 0
-        while divisor < dividend:
-            divisor <<= 1
-            shift_count += 1
+        # Преобразование в двоичный вид
+        binary_product = bin(product)[2:].zfill(self.bits - 1)
+        result_binary = result_sign + binary_product
 
-        quotient = ""
+        # Определение десятичного результата
+        decimal_result = product if result_sign == '0' else -product
 
-        for _ in range(shift_count + 1):
-            if dividend >= divisor:
-                quotient += "1"
-                dividend -= divisor
-            else:
-                quotient += "0"
-            divisor >>= 1
+        return decimal_result, result_binary
 
-        BINARY_POINT = "."
-        quotient += BINARY_POINT
+    def divide_with_precision(self, precision=5):
+        if self.number_2 == 0:
+            raise ZeroDivisionError("Деление на ноль невозможно!")
 
+        def get_sign_and_abs(n):
+            sign = 1 if n >= 0 else -1
+            abs_val = abs(n)
+            return sign, abs_val
+
+        sign1, abs1 = get_sign_and_abs(self.number_1)
+        sign2, abs2 = get_sign_and_abs(self.number_2)
+
+        result_sign = sign1 * sign2
+
+        quotient = 0
+        remainder = abs1
+
+        # Целая часть деления
+        while remainder >= abs2:
+            remainder -= abs2
+            quotient += 1
+
+        # Дробная часть деления
+        fractional = []
         for _ in range(precision):
-            dividend <<= 1
-            if dividend >= int(number_2_direct[1:], 2):
-                quotient += "1"
-                dividend -= int(number_2_direct[1:], 2)
+            remainder *= 2
+            if remainder >= abs2:
+                fractional.append('1')
+                remainder -= abs2
             else:
-                quotient += "0"
+                fractional.append('0')
 
-        integer_part, fractional_part = quotient.split(".")
-        decimal_value = int(integer_part, 2) + sum(
-            int(bit) * (2 ** -(i + 1)) for i, bit in enumerate(fractional_part)
-        )
+        # Формирование результата
+        fractional_str = ''.join(fractional)
+        binary_result = f"{bin(quotient)[2:]}.{fractional_str}"
 
-        if result_sign == "1":
-            decimal_value = -decimal_value
+        # Преобразование в десятичный вид
+        decimal_result = quotient + sum(
+            int(bit) * (2 ** -(i + 1)) for i, bit in enumerate(fractional))
+        decimal_result *= result_sign
 
-        res_binary = result_sign + integer_part + "." + fractional_part
+        # Формирование прямого кода
+        sign_bit = '0' if result_sign > 0 else '1'
+        binary_result = sign_bit + ' ' + binary_result
 
-        return decimal_value, res_binary
+        return decimal_result, binary_result
 
     def show_multiplication_result(self, decimal_value, res_binary, bits=DEFAULT_BITS):
         converter = BinaryConverter(decimal_value, bits)
